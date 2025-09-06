@@ -31,6 +31,7 @@ class Grid():
     cells: List[List[GridCell]]
     width: int
     height: int
+    base_colors_min_count: int
     
     def __init__(self, width: int = 0, height: int = 0):
         self.width = width
@@ -40,49 +41,93 @@ class Grid():
         self.init_grid()
 
     def init_grid(self):
-        self.cells = [[GridCell(x, y, region_color=self.colors[0]) for x in range(self.width)] for y in range(self.height)]
-    # def generate_v2(self):
+        self.cells = [[GridCell(x, y, region_color=self.colors[0], is_occupied=False) for x in range(self.width)] for y in range(self.height)]
 
-    #     while self.get_star_count() < min(self.width, self.height):
-    #         self.cells = [[GridCell(x, y) for x in range(self.width)] for y in range(self.height)]
-    #         positions = [(x, y) for x in range(self.width) for y in range(self.height)]
-    #         random.shuffle(positions)
+    def new_generate(self):
 
-    #         for i in range(len(self.colors)):
-    #             x, y = positions[i]
-    #             color = self.colors[i % len(self.colors)]
-    #             self.cells[y][x] = GridCell(x, y, is_occupied=False, region_color=color)
+        positions = [(x, y) for x in range(self.width) for y in range(self.height)]
+        random.shuffle(positions)
 
-    #         self.fill_empty_cells()
+        zones_extremities = []
 
-    #         for x, y in positions:
-    #             if self.is_valid_star_position(x, y):
-    #                 self.cells[y][x].is_occupied = True
+        for i in range(self.width):
+            available_y = [y for y in range(self.height) if self.is_valid_star_position(i, y)]
+            y = random.choice(available_y) if available_y else None
+            if y is not None:
+                color = self.colors[(y * self.width + i) % len(self.colors)]
+                self.cells[y][i] = GridCell(i, y, is_occupied=True, region_color=color)
+                if color != self.colors[0]:
+                    zones_extremities.append((y, i))
+
+
+        self.base_colors_min_count = random.randint(1, int(self.width * self.height / 2))
+
+        print(f"Base color min count: {self.base_colors_min_count}")
+
+        number_base_color_grid = Grid().get_color_min_count(self.cells, self.colors[0])
+        while number_base_color_grid > self.base_colors_min_count:
+            cells = self.copy_cells()
+
+            random.shuffle(zones_extremities)
+
+            selected_extremity = zones_extremities[0]
+
+            if selected_extremity is None:
+                raise Exception("No more extremities to process, but grid is still not valid")
+
+            # Process the selected extremity
+            y, x = selected_extremity
+            valid_cells = Grid().get_valid_connected_cells(cells, y, x, self.colors[0])
+            if not valid_cells or len(valid_cells) == 0:
+                continue
+
+            new_y, new_x = random.choice(valid_cells)
+    
+            cells[new_y][new_x].region_color = cells[y][x].region_color
+
+            new_colored_cell_valid_connected_cells = Grid().get_valid_connected_cells(cells, new_y, new_x, self.colors[0])
+
+            if new_colored_cell_valid_connected_cells is not None and len(new_colored_cell_valid_connected_cells) > 0:
+                zones_extremities.append((new_y, new_x))
+
+            number_base_color_grid = Grid().get_color_min_count(cells, self.colors[0])
+            valid_cells = Grid().get_valid_connected_cells(cells, y, x, self.colors[0])
+
+            extremity_cells_to_remove = []
+            for extremity_cell in zones_extremities:
+                extremity_cell_valid_cells = Grid().get_valid_connected_cells(cells, *extremity_cell, self.colors[0])
+                if len(extremity_cell_valid_cells) == 0:
+                    extremity_cells_to_remove.append(extremity_cell)
+            zones_extremities = [cell for cell in zones_extremities if cell not in extremity_cells_to_remove]
+            self.cells = cells
         
-    #     i = 0
-    #     # while self.count_solutions(self.cells) > 1:
-    #     #     print(f"Try {i}: Count solutions: {self.count_solutions(self.cells)}")
-    #     #     current_solutions_count = self.count_solutions(self.cells)
-    #     #     copied_cells = [row[:] for row in self.cells]
-    #     #     positions = [(x, y) for x in range(self.width) for y in range(self.height)]
-    #     #     random.shuffle(positions)
-    #     #     for x, y in positions:
-    #     #         if self.cells[y][x].is_occupied:
-    #     #             continue
-    #     #         adgacent_colors = self.get_adgacent_colors(x, y)
-    #     #         simplified_adgacent_colors = [color for color in adgacent_colors if color != self.cells[y][x].region_color]
-    #     #         if len(simplified_adgacent_colors) > 0:
-    #     #             for color in simplified_adgacent_colors:
-    #     #                 copied_cells[y][x].region_color = color
-    #     #                 new_solutions_count = self.count_solutions(copied_cells)
-    #     #                 if new_solutions_count > 0 and new_solutions_count < current_solutions_count:
-    #     #                     break
-    #     #             else:
-    #     #                 copied_cells[y][x].region_color = self.cells[y][x].region_color
-    #     #     self.cells = copied_cells
-    #     #     i += 1
-    #     print(f"Final count solutions: {self.count_solutions(self.cells)}")
+        print(f"Count solutions: {Grid().count_solutions(self.cells)}")
+    
 
+    def get_valid_connected_cells(cls, cells: List[List[GridCell]], y: int, x: int, base_color: str) -> List[Tuple[int, int]]:
+        if cells[y][x].region_color is None:
+            return []
+
+        valid_cells = set()
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+        for dy, dx in directions:
+            ny, nx = y + dy, x + dx
+            if 0 <= ny < len(cells) and 0 <= nx < len(cells[0]):
+                if cells[ny][nx].region_color == base_color and not cells[ny][nx].is_occupied:
+                    new_test_cells = cells.copy()
+                    new_test_cells[ny][nx].region_color = cells[y][x].region_color
+                    if Grid().count_solutions(new_test_cells) == 1:
+                        valid_cells.add((ny, nx))
+        return list(valid_cells)
+
+    def get_color_min_count(cls, cells: List[List[GridCell]], base_color: str) -> int:
+        count = 0
+        for row in cells:
+            for cell in row:
+                if cell.region_color == base_color:
+                    count += 1
+        return count
 
     def generate(self):
         # Créer une liste de toutes les positions possibles
@@ -105,9 +150,6 @@ class Grid():
                         star_positions.append((y, x))
                     else:
                         first_star = False
-
-            # color_changed_number = 0
-            # while color_changed_number < (self.width*self.height)/2:
         
             for star_pos in star_positions:
                 random_range = 0.9

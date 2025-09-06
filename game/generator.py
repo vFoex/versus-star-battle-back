@@ -10,7 +10,7 @@ class Generator():
 
         grid = Grid(width=width, height=height)
 
-        grid.generate()
+        grid.new_generate()
 
         print(f"Count solutions: {Grid().count_solutions(grid.cells)}")
 
